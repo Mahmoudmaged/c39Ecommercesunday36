@@ -204,10 +204,13 @@ export const webhook = asyncHandler(async (req, res, next) => {
     }
 
     // Handle the event
-    if (event.type != checkout.session.completed) {
-        return res.state(400).json({ message: "Payment Faild", event: event.type })
+    if (event.type != 'checkout.session.completed') {
+        return res.state(400).json({ message: "Payment failed", event: event.type })
     }
     console.log(event);
+    const { orderId } = event.metadata
+    await orderModel.updateOne({_id: orderId} , {status:"placed"})
     // Return a 200 res to acknowledge receipt of the event
-    res.status(200).json({message:"Done" , event});
+    res.status(200).json({ message: "Done", event });
+
 })
