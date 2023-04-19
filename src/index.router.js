@@ -49,8 +49,14 @@ const initApp = (app, express) => {
 
 
     //convert Buffer Data
-    
-    app.use(express.json({}))
+    app.use((req, res, next) => {
+        console.log(req.originalUrl);
+        if (req.originalURL == '/order/webhook') {
+            next()
+        } else {
+            express.json({})(req, res, next)
+        }
+    })
     //Setup API Routing 
     app.get('/', (req, res, next) => {
         res.send("Welcome to c39 E-commerce App")

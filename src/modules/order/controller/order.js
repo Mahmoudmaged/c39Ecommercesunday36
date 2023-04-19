@@ -5,6 +5,8 @@ import orderModel from "../../../../DB/model/Order.model.js";
 import cartModel from "../../../../DB/model/Cart.model.js";
 import { createInvoice } from "../../../utils/pdf.js";
 import { clearSelectedItems, emptyCart } from "../../cart/controller/cart.js";
+import payment from "../../../utils/payment.js";
+import Stripe from "stripe";
 
 export const createOrder = asyncHandler(async (req, res, next) => {
     const { address, phone, couponName, note, paymentType } = req.body
@@ -85,6 +87,16 @@ export const createOrder = asyncHandler(async (req, res, next) => {
         await clearSelectedItems(productIds, req.user._id)
     }
 
+    //    [ {
+    //         price_data = {
+    //             currency= 'usd',
+    //             product_data= {
+    //                 name
+    //             }
+    //         },
+    //             quantity
+    //     }]
+    // Handel invoice
     const invoice = {
         shipping: {
             name: req.user.userName,
@@ -100,10 +112,40 @@ export const createOrder = asyncHandler(async (req, res, next) => {
         total: order.finalPrice,
         invoice_nr: order._id
     };
-
     await createInvoice(invoice, "invoice.pdf");
+    //handel Payment
 
+    if (order.paymentType == 'card') {
+        const stripe = new Stripe(process.env.STRIPE_SECRET);
+        if (req.body.coupon) {
+            const coupon = await stripe.coupons.create({ percent_off: req.body.coupon.amount, duration: 'once' })
+            console.log(coupon);
+            req.body.couponId = coupon.id
+        }
+        const session = await payment({
+            stripe,
+            customer_email: req.user.email,
+            metadata: {
+                orderId: order._id.toString()
+            },
+            cancel_url: `${process.env.cancel_url}?orderId=${order._id.toString()}`,
+            line_items: order.products.map(product => {
+                return {
+                    price_data: {
+                        currency: 'egp',
+                        product_data: {
+                            name: product.name
+                        },
+                        unit_amount: product.unitPrice * 100
+                    },
+                    quantity: product.quantity
+                }
+            }),
+            discounts: req.body.couponId ? [{ coupon: req.body.couponId }] : []
+        })
 
+        return res.status(201).json({ message: "Done", order, url: session.url })
+    }
     return res.status(201).json({ message: "Done", order })
 })
 
@@ -146,4 +188,26 @@ export const deliveredOrder = asyncHandler(async (req, res, next) => {
 
     return res.status(200).json({ message: "Done" })
 
+})
+
+
+export const webhook = asyncHandler(async (req, res, next) => {
+
+    const stripe = new Stripe(process.env.STRIPE_SECRET);
+    const sig = req.headers['stripe-signature'];
+    let event;
+    try {
+        event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_SECRET_ENDPOINT);
+    } catch (err) {
+        res.status(400).send(`Webhook Error: ${err.message}`);
+        return;
+    }
+
+    // Handle the event
+    if (event.type != checkout.session.completed) {
+        return res.state(400).json({ message: "Payment Faild", event: event.type })
+    }
+    console.log(event);
+    // Return a 200 res to acknowledge receipt of the event
+    res.status(200).json({message:"Done" , event});
 })
