@@ -51,7 +51,7 @@ const initApp = (app, express) => {
     //convert Buffer Data
     app.use((req, res, next) => {
         console.log(req.originalUrl);
-        if (req.originalURL == '/order/webhook') {
+        if (req.originalUrl == '/order/webhook') {
             next()
         } else {
             express.json({})(req, res, next)
