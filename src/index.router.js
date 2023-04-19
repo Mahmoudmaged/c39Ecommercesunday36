@@ -52,6 +52,9 @@ const initApp = (app, express) => {
     
     app.use(express.json({}))
     //Setup API Routing 
+    app.get('/', (req, res, next) => {
+        res.send("Welcome to c39 E-commerce App")
+    })
     app.use(`/auth`, authRouter)
     app.use(`/user`, userRouter)
     app.use(`/product`, productRouter)
